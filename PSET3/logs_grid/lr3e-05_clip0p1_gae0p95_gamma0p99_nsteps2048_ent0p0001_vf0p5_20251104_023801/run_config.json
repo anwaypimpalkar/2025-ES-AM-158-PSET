@@ -1,0 +1,16 @@
+{
+  "config": {
+    "learning_rate": 3e-05,
+    "clip_range": 0.1,
+    "gae_lambda": 0.95,
+    "gamma": 0.99,
+    "n_steps": 2048,
+    "ent_coef": 0.0001,
+    "vf_coef": 0.5
+  },
+  "seed": 42,
+  "timesteps": 1024000,
+  "mean_eval_return": 3542.0814552,
+  "std_eval_return": 52.39283475358642,
+  "model_path": "ckpt_grid/ppo_halfcheetah_lr3e-05_clip0p1_gae0p95_gamma0p99_nsteps2048_ent0p0001_vf0p5_20251104_023801.zip"
+}

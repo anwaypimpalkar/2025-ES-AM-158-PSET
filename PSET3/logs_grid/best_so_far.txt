@@ -1,0 +1,3 @@
+best_return=3904.3672
+logdir=logs_grid/lr3e-05_clip0p2_gae0p95_gamma0p98_nsteps2048_ent0p0004_vf0p5_20251104_045024
+config={"learning_rate": 3e-05, "clip_range": 0.2, "gae_lambda": 0.95, "gamma": 0.98, "n_steps": 2048, "ent_coef": 0.0004, "vf_coef": 0.5}
