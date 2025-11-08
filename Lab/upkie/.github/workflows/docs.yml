@@ -1,0 +1,51 @@
+name: Documentation
+
+on:
+    schedule:
+        - cron: "0 0 * * 1"
+    push:
+        branches: [ main ]
+    pull_request:
+        branches: [ main ]
+
+jobs:
+    docs:
+        name: "Documentation"
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+
+        steps:
+            - name: "Checkout Git repository"
+              uses: actions/checkout@v4
+
+            - name: "Install Inkscape for figures"
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install inkscape
+
+            - name: "Install pixi environment"
+              uses: prefix-dev/setup-pixi@v0.8.8
+              with:
+                  environments: docs
+                  activate-environment: true
+
+            - name: "Run pixi"
+              run: |
+                  pixi run docs-make
+
+            - name: "Deploy to GitHub Pages"
+              uses: peaceiris/actions-gh-pages@v3
+              if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+              with:
+                  publish_branch: gh-pages
+                  github_token: ${{ secrets.GITHUB_TOKEN }}
+                  publish_dir: docs/html/
+                  force_orphan: true
+
+    docs_success:
+        name: "Documentation success"
+        runs-on: ubuntu-latest
+        needs: [docs]
+        steps:
+            - run: echo "Documentation workflow completed successfully"

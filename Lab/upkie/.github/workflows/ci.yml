@@ -1,0 +1,231 @@
+name: CI
+
+on:
+    schedule:
+        - cron: "0 0 * * 1"
+    push:
+        branches: [ main ]
+    pull_request:
+        branches: [ main ]
+
+jobs:
+    artifacts:
+        name: "Artifacts"
+        runs-on: ubuntu-22.04
+
+        env:
+            SPINE: pi3hat_spine
+            SPINE_PATH: ./bazel-out/aarch64-opt/bin/spines/
+
+        steps:
+            - name: "Checkout sources"
+              uses: actions/checkout@v4
+
+            - name: "Install dependencies"
+              run: |
+                  sudo apt-get install libncurses5
+
+            - name: "Build pi3hat spine artifact"
+              run: |
+                  tools/bazelisk build --verbose_failures --config=pi64 //spines:pi3hat_spine
+
+            - name: "Prepare artifacts directory"
+              run: |
+                  mkdir -p artifacts && mv ${{ env.SPINE_PATH }}${{ env.SPINE }} ./artifacts/
+
+            - name: "Upload artifacts"
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ env.SPINE }}
+                  path: ./artifacts
+
+    build_linux:
+        name: "Build on Linux"
+        runs-on: ubuntu-22.04
+
+        steps:
+            - name: "Checkout sources"
+              uses: actions/checkout@v4
+
+            - name: "Set up Python"
+              uses: actions/setup-python@v4
+              with:
+                  python-version: "3.11"
+
+            - name: "Build all targets"
+              env:
+                  BAZELISK_GITHUB_TOKEN: ${{ secrets.BAZELISK_GITHUB_TOKEN }}
+              run: |
+                  tools/bazelisk build --compilation_mode=fastbuild  //...
+
+    build_darwin_arm64:
+        name: "Build on macOS (ARM64)"
+        runs-on: macos-latest
+
+        steps:
+            - name: "Checkout sources"
+              uses: actions/checkout@v4
+
+            - name: "Set up Python"
+              uses: actions/setup-python@v4
+              with:
+                  python-version: "3.11"
+
+            - name: 'Set up latest Oracle JDK 21'
+              uses: oracle-actions/setup-java@v1
+              with:
+                  website: oracle.com
+                  release: 21
+
+            - name: "Build all targets"
+              run: |
+                  tools/bazelisk build --compilation_mode=fastbuild --config=darwin_arm64 //...
+
+    build_darwin_x86:
+        name: "Build on macOS (x86)"
+        runs-on: macos-13
+
+        steps:
+            - name: "Checkout sources"
+              uses: actions/checkout@v4
+
+            - name: "Set up Python"
+              uses: actions/setup-python@v4
+              with:
+                  python-version: "3.11"
+
+            - name: 'Set up latest Oracle JDK 21'
+              uses: oracle-actions/setup-java@v1
+              with:
+                  website: oracle.com
+                  release: 21
+
+            - name: "Build all targets"
+              run: |
+                  tools/bazelisk build --compilation_mode=fastbuild --config=darwin_x86 //...
+
+    build_raspi:
+        name: "Cross-compile to the Raspberry Pi"
+        runs-on: ubuntu-22.04
+
+        steps:
+            - name: "Checkout sources"
+              uses: actions/checkout@v4
+
+            - name: "Install dependencies"
+              run: |
+                  # See https://github.com/orgs/upkie/discussions/42
+                  sudo apt-get install libtinfo5
+
+            - name: "Build Raspberry Pi targets"
+              env:
+                  BAZELISK_GITHUB_TOKEN: ${{ secrets.BAZELISK_GITHUB_TOKEN }}
+              run: |
+                  make build
+
+    coverage:
+        name: "Code coverage"
+        runs-on: ubuntu-22.04
+
+        steps:
+            - name: "Checkout sources"
+              uses: actions/checkout@v4
+
+            - name: "Setup Pixi"
+              uses: prefix-dev/setup-pixi@v0.8.14
+              with:
+                  pixi-version: v0.49.0
+                  cache: true
+
+            - name: "Run coverage tests"
+              run: |
+                  pixi run coverage-report
+
+            - name: "Submit report to Coveralls"
+              uses: coverallsapp/github-action@v2
+              with:
+                  github-token: ${{ secrets.github_token }}
+                  file: ${{ github.workspace }}/bazel-out/_coverage/_coverage_report.dat
+                  format: lcov
+
+    lint:
+        name: "Lint code"
+        runs-on: ubuntu-22.04
+
+        steps:
+            - name: "Checkout sources"
+              uses: actions/checkout@v4
+
+            - name: "Setup Pixi"
+              uses: prefix-dev/setup-pixi@v0.8.14
+              with:
+                  pixi-version: v0.49.0
+                  cache: true
+
+            - name: "Check code formatting"
+              run: |
+                  pixi run lint
+
+    test-cpp:
+        name: "Test C++ library on ${{ matrix.os }}"
+        runs-on: ${{ matrix.os }}
+
+        strategy:
+            matrix:
+                os: [ubuntu-22.04, ubuntu-24.04]
+
+        steps:
+            - name: "Checkout sources"
+              uses: actions/checkout@v4
+
+            - name: "Install libtinfo5 for Ubuntu 24.04"
+              if: matrix.os == 'ubuntu-24.04'
+              run: |
+                  wget http://archive.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
+                  sudo dpkg -i libtinfo5_6.3-2ubuntu0.1_amd64.deb
+
+            - name: "Run unit tests"
+              run: |
+                  tools/bazelisk test //upkie/...
+
+    test-python:
+        name: "Test Python library with ${{ matrix.pyenv }} on ${{ matrix.os }}"
+        runs-on: ${{ matrix.os }}
+
+        strategy:
+            matrix:
+                os: [ubuntu-latest, macos-latest]
+                pyenv: [py39, py310, py311, py312]
+
+        steps:
+            - name: "Checkout sources"
+              uses: actions/checkout@v4
+
+            - name: "Setup Pixi"
+              uses: prefix-dev/setup-pixi@v0.8.14
+              with:
+                  pixi-version: v0.49.0
+                  environments: test-${{ matrix.pyenv }}
+                  cache: true
+
+            - name: "Check unit tests"
+              run: |
+                  pixi run -e test-${{ matrix.pyenv }} test
+
+    ci_success:
+        name: "CI success"
+        runs-on: ubuntu-22.04
+
+        needs:
+            - artifacts
+            - build_darwin_arm64
+            - build_darwin_x86
+            - build_linux
+            - build_raspi
+            - coverage
+            - lint
+            - test-cpp
+            - test-python
+
+        steps:
+            - run: echo "CI workflow completed successfully"
